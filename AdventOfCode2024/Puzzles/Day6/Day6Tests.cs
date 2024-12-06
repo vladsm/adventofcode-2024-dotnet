@@ -179,28 +179,28 @@ internal sealed class SolverB : SolverBase
 			newObstacles.Add((y, x));
 		}
 
-		return newObstacles.Count(obstacle => IsCircularRoute(obstacle, board, startY, startX));
+		var result = newObstacles.Count(obstacle => IsCircularRoute(obstacle, board, startY, startX));
+		return result;
 	}
 
 	private static bool IsCircularRoute((int y, int x) newObstacle, Board board, int startY, int startX)
 	{
 		board[newObstacle.y, newObstacle.x] = Cell.Obstacle;
 
-		var visitedPoints = new HashSet<(int, int)>();
+		var visitedPoints = new HashSet<(int, int, (int, int))>();
 
 		(int fromY, int fromX) = (startY, startX);
 		Direction direction = InitialDirection;
 		bool result = false;
 		while (Move(ref fromY, ref fromX, direction, board))
 		{
-			if (visitedPoints.Contains((fromY, fromX)))
+			if (!visitedPoints.Add((fromY, fromX, direction)))
 			{
 				result = true;
 				break;
 			}
 
 			direction = NextDirectionClockwise(direction);
-			visitedPoints.Add((fromY, fromX));
 		}
 
 		board[newObstacle.y, newObstacle.x] = Cell.Empty;
@@ -212,7 +212,6 @@ internal sealed class SolverB : SolverBase
 		int sizeY = board.GetLength(0);
 		int sizeX = board.GetLength(1);
 
-		int steps = 0;
 		while (true)
 		{
 			(int moveY, int moveX) = direction;
@@ -221,14 +220,10 @@ internal sealed class SolverB : SolverBase
 
 			if (newY < 0 || newY >= sizeY) return false;
 			if (newX < 0 || newX >= sizeX) return false;
-			if (board[newY, newX] == Cell.Obstacle)
-			{
-				return steps > 0;
-			}
+			if (board[newY, newX] == Cell.Obstacle) return true;
 
 			fromY = newY;
 			fromX = newX;
-			++steps;
 		}
 	}
 }
