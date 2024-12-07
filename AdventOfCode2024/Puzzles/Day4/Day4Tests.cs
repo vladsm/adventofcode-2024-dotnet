@@ -9,7 +9,7 @@ namespace AdventOfCode2024.Puzzles.Day4;
 public sealed class Day4Tests(ITestOutputHelper _output) : PuzzleTestsBase
 {
 	[Fact(DisplayName = "Sample_1")]
-	public async Task Sample_1()
+	public void Sample_1()
 	{
 		string input =
 			"""
