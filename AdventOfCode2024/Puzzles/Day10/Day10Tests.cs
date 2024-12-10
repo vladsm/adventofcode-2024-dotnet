@@ -1,4 +1,6 @@
-﻿using AdventOfCode;
+﻿using System.Collections;
+
+using AdventOfCode;
 
 using JetBrains.Annotations;
 
@@ -25,7 +27,7 @@ public sealed class Day10Tests(ITestOutputHelper _output) : PuzzleTestsBase
 			10456732
 			""";
 		string[] lines = input.Split("\r\n");
-		int result = await new SolverA().Solve(lines.ToAsyncEnumerable());
+		int result = await new SolverB().Solve(lines.ToAsyncEnumerable());
 		_output.WriteLine($"Result: {result}");
 	}
 
@@ -50,16 +52,22 @@ public sealed class Day10Tests(ITestOutputHelper _output) : PuzzleTestsBase
 	}
 }
 
+internal interface IPathsTracker : IEnumerable<(Position pos, IReadOnlyCollection<Position> trailheads)>
+{
+	void AddStep(Position initial);
+	void AddStep(Position next, IReadOnlyCollection<Position> trailheads);
+	int CalculateTotalScore();
+}
 
-internal abstract class SolverBase : SolverWithArrayInput<string, int>
+
+internal abstract class SolverBase<TPathsTracker> : SolverWithArrayInput<string, int>
+	where TPathsTracker : IPathsTracker, new()
 {
 	protected override int Solve(string[] lines)
 	{
 		var map = Parse(lines);
 		return Solve(map);
 	}
-
-	protected abstract int Solve(sbyte[][] map);
 
 
 	private static sbyte[][] Parse(string[] lines)
@@ -84,52 +92,36 @@ internal abstract class SolverBase : SolverWithArrayInput<string, int>
 				_ => -1
 			};
 	}
-}
 
-
-[UsedImplicitly]
-internal sealed class SolverA : SolverBase
-{
-	protected override int Solve(sbyte[][] map)
+	private int Solve(sbyte[][] map)
 	{
 		int sizeY = map.Length;
 		int sizeX = map[0].Length;
 
 		sbyte height = 0;
-		var visited = new Dictionary<Position, HashSet<Position>>();
+		var visited = new TPathsTracker();
 		for (int y = 0; y < sizeY; ++y)
 		for (int x = 0; x < sizeX; ++x)
 		{
 			if (map[y][x] != 0) continue;
-			visited[(y, x)] = [(y, x)];
+			visited.AddStep((y, x));
 		}
 
 		while (++height <= 9)
 		{
-			var newVisited = new Dictionary<Position, HashSet<Position>>();
-			foreach ((Position pos, HashSet<Position> trailheads) in visited)
+			var newVisited = new TPathsTracker();
+			foreach ((Position pos, IReadOnlyCollection<Position> trailheads) in visited)
 			{
 				foreach (Position next in NextPositions(pos.y, pos.x, map))
 				{
 					if (map[next.y][next.x] != height) continue;
-					if (!newVisited.TryGetValue(next, out HashSet<Position>? nextTrailheads))
-					{
-						nextTrailheads = [..trailheads];
-						newVisited.Add(next, nextTrailheads);
-					}
-					else
-					{
-						foreach (Position trailhead in trailheads)
-						{
-							nextTrailheads.Add(trailhead);
-						}
-					}
+					newVisited.AddStep(next, trailheads);
 				}
 			}
 			visited = newVisited;
 		}
 
-		return visited.Values.SelectMany(trailheads => trailheads).CountBy(trailhead => trailhead).Sum(g => g.Value);
+		return visited.CalculateTotalScore();
 	}
 
 
@@ -147,12 +139,90 @@ internal sealed class SolverA : SolverBase
 	}
 }
 
+[UsedImplicitly]
+internal sealed class SolverA : SolverBase<TrackerA>;
 
 [UsedImplicitly]
-internal sealed class SolverB : SolverBase
+internal sealed class SolverB : SolverBase<TrackerB>;
+
+
+internal sealed class TrackerA : IPathsTracker
 {
-	protected override int Solve(sbyte[][] map)
+	private readonly Dictionary<Position, HashSet<Position>> _visited = new();
+
+	public void AddStep(Position initial)
 	{
-		throw new NotImplementedException();
+		_visited[(initial.y, initial.x)] = [(initial.y, initial.x)];
 	}
+
+	public void AddStep(Position next, IReadOnlyCollection<Position> trailheads)
+	{
+		if (!_visited.TryGetValue(next, out HashSet<Position>? nextTrailheads))
+		{
+			nextTrailheads = [..trailheads];
+			_visited.Add(next, nextTrailheads);
+		}
+		else
+		{
+			foreach (Position trailhead in trailheads)
+			{
+				nextTrailheads.Add(trailhead);
+			}
+		}
+	}
+
+	public int CalculateTotalScore() =>
+		_visited.Values.
+			SelectMany(trailheads => trailheads).
+			CountBy(trailhead => trailhead).
+			Sum(g => g.Value);
+
+	public IEnumerator<(Position pos, IReadOnlyCollection<Position> trailheads)> GetEnumerator()
+	{
+		foreach (var (pos, trailheads) in _visited)
+		{
+			yield return (pos, trailheads);
+		}
+	}
+
+	IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+}
+
+
+internal sealed class TrackerB : IPathsTracker
+{
+	private readonly Dictionary<Position, List<Position>> _visited = new();
+
+	public void AddStep(Position initial)
+	{
+		_visited[(initial.y, initial.x)] = [(initial.y, initial.x)];
+	}
+
+	public void AddStep(Position next, IReadOnlyCollection<Position> trailheads)
+	{
+		if (!_visited.TryGetValue(next, out List<Position>? nextTrailheads))
+		{
+			nextTrailheads = [..trailheads];
+			_visited.Add(next, nextTrailheads);
+		}
+		else
+		{
+			nextTrailheads.AddRange(trailheads);
+		}
+	}
+
+	public int CalculateTotalScore() =>
+		_visited.Values.
+			SelectMany(trailheads => trailheads).
+			Count();
+
+	public IEnumerator<(Position pos, IReadOnlyCollection<Position> trailheads)> GetEnumerator()
+	{
+		foreach (var (pos, trailheads) in _visited)
+		{
+			yield return (pos, trailheads);
+		}
+	}
+
+	IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 }
