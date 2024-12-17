@@ -13,48 +13,48 @@ public sealed class Day16Tests(ITestOutputHelper _output) : PuzzleTestsBase
 	[Fact(DisplayName = "Sample 1")]
 	public async Task Sample_1()
 	{
-		string input =
-			"""
-			###############
-			#.......#....E#
-			#.#.###.#.###.#
-			#.....#.#...#.#
-			#.###.#####.#.#
-			#.#.#.......#.#
-			#.#.#####.###.#
-			#...........#.#
-			###.#.#####.#.#
-			#...#.....#.#.#
-			#.#.#.###.#.#.#
-			#.....#...#.#.#
-			#.###.#.#.#.#.#
-			#S..#.....#...#
-			###############
-			""";
-
 		// string input =
 		// 	"""
-		// 	#################
-		// 	#...#...#...#..E#
-		// 	#.#.#.#.#.#.#.#.#
-		// 	#.#.#.#...#...#.#
-		// 	#.#.#.#.###.#.#.#
-		// 	#...#.#.#.....#.#
-		// 	#.#.#.#.#.#####.#
-		// 	#.#...#.#.#.....#
-		// 	#.#.#####.#.###.#
-		// 	#.#.#.......#...#
-		// 	#.#.###.#####.###
-		// 	#.#.#...#.....#.#
-		// 	#.#.#.#####.###.#
-		// 	#.#.#.........#.#
-		// 	#.#.#.#########.#
-		// 	#S#.............#
-		// 	#################
+		// 	###############
+		// 	#.......#....E#
+		// 	#.#.###.#.###.#
+		// 	#.....#.#...#.#
+		// 	#.###.#####.#.#
+		// 	#.#.#.......#.#
+		// 	#.#.#####.###.#
+		// 	#...........#.#
+		// 	###.#.#####.#.#
+		// 	#...#.....#.#.#
+		// 	#.#.#.###.#.#.#
+		// 	#.....#...#.#.#
+		// 	#.###.#.#.#.#.#
+		// 	#S..#.....#...#
+		// 	###############
 		// 	""";
 
+		string input =
+			"""
+			#################
+			#...#...#...#..E#
+			#.#.#.#.#.#.#.#.#
+			#.#.#.#...#...#.#
+			#.#.#.#.###.#.#.#
+			#...#.#.#.....#.#
+			#.#.#.#.#.#####.#
+			#.#...#.#.#.....#
+			#.#.#####.#.###.#
+			#.#.#.......#...#
+			#.#.###.#####.###
+			#.#.#...#.....#.#
+			#.#.#.#####.###.#
+			#.#.#.........#.#
+			#.#.#.#########.#
+			#S#.............#
+			#################
+			""";
+
 		string[] lines = input.Split("\r\n");
-		long result = await new SolverA().Solve(lines.ToAsyncEnumerable());
+		long result = await new SolverB().Solve(lines.ToAsyncEnumerable());
 		_output.WriteLine($"Result: {result}");
 	}
 
@@ -177,7 +177,6 @@ internal abstract class SolverBase : SolverWithArrayInput<string, long>
 
 	protected static Graph CreateGraph(Map map, Position start)
 	{
-		var vStart = new Vertex(start, Directions.Right);
 		var graph = new Graph();
 
 		int sizeY = map.Length;
@@ -191,8 +190,15 @@ internal abstract class SolverBase : SolverWithArrayInput<string, long>
 			}
 		}
 
-		//CollectAdjacentVertexes(vStart, graph, map);
 		return graph;
+	}
+
+	private static bool IsGraphVertex(int y, int x, Map map)
+	{
+		bool notVertex =
+			map[y - 1][x] == Empty && map[y + 1][x] == Empty && map[y][x - 1] != Empty && map[y][x + 1] != Empty ||
+			map[y - 1][x] != Empty && map[y + 1][x] != Empty && map[y][x - 1] == Empty && map[y][x + 1] == Empty;
+		return !notVertex;
 	}
 
 	private static void CollectAdjacentVertexes(Vertex vFrom, Graph graph, Map map)
@@ -200,13 +206,7 @@ internal abstract class SolverBase : SolverWithArrayInput<string, long>
 		(Position from, char fromDirection) = vFrom;
 		var (cy, cx) = from;
 		if (map[cy][cx] == Wall) return;
-
-		// int cways = 0;
-		// if (map[cy + 1][cx] == Empty) ++cways;
-		// if (map[cy - 1][cx] == Empty) ++cways;
-		// if (map[cy][cx + 1] == Empty) ++cways;
-		// if (map[cy][cx - 1] == Empty) ++cways;
-		// if (cways  2) return;
+		if (!IsGraphVertex(cy, cx, map)) return;
 
 		List<(Vertex, int)> toList = new();
 
@@ -217,29 +217,13 @@ internal abstract class SolverBase : SolverWithArrayInput<string, long>
 		toList.AddRange(rotations);
 
 		(int vy, int vx) = DirectionToVector(fromDirection);
-		// (int ny, int nx) = (cy + vy, cx + vx);
-		// if (map[ny][nx] != Wall)
-		// {
-		// 	toList.Add((new Vertex((ny, nx), fromDirection), 1));
-		// }
 
 		int cost = 0;
 		while (true)
 		{
 			(int ny, int nx) = (cy + vy, cx + vx);
 
-			bool finishEdge = map[ny][nx] == Wall;
-			if (!finishEdge)
-			{
-				int ways = 0;
-				if (map[ny + 1][nx] == Empty) ++ways;
-				if (map[ny - 1][nx] == Empty) ++ways;
-				if (map[ny][nx + 1] == Empty) ++ways;
-				if (map[ny][nx - 1] == Empty) ++ways;
-				if (ways > 2) finishEdge = true;
-			}
-
-			if (finishEdge)
+			if (map[ny][nx] == Wall)
 			{
 				if (cost > 0)
 				{
@@ -249,91 +233,16 @@ internal abstract class SolverBase : SolverWithArrayInput<string, long>
 			}
 
 			++cost;
+			if (IsGraphVertex(ny, nx, map))
+			{
+				toList.Add((new Vertex((ny, nx), fromDirection), cost));
+				break;
+			}
+
 			(cy, cx) = (ny, nx);
 		}
 
 		graph.Add(vFrom, toList);
-	}
-
-	private static void CollectAdjacentVertexesOneThatWorks(Vertex vFrom, Graph graph, Map map)
-	{
-		(Position from, char fromDirection) = vFrom;
-		var (cy, cx) = from;
-		if (map[cy][cx] == Wall) return;
-
-		List<(Vertex, int)> toList = new();
-
-		var rotations = _directions.
-			Where(d => d != fromDirection).
-			Select(d => (new Vertex(from, d), RotateCost(fromDirection, d))).
-			ToList();
-		toList.AddRange(rotations);
-
-		(int vy, int vx) = DirectionToVector(fromDirection);
-		(int ny, int nx) = (cy + vy, cx + vx);
-		try
-		{
-			if (map[ny][nx] != Wall)
-			{
-				toList.Add((new Vertex((ny, nx), fromDirection), 1));
-			}
-		}
-		catch (Exception e)
-		{
-			Console.WriteLine(e);
-			throw;
-		}
-
-		graph.Add(vFrom, toList);
-	}
-
-	private static void CollectAdjacentVertexesOld(Vertex vFrom, Graph graph, Map map)
-	{
-		if (graph.ContainsKey(vFrom)) return;
-
-		List<(Vertex, int)> toList = new();
-
-		(Position from, char fromDirection) = vFrom;
-
-		var rotations = _directions.
-			Where(d => d != fromDirection).
-			Select(d => (new Vertex(from, d), RotateCost(fromDirection, d))).
-			ToList();
-		toList.AddRange(rotations);
-
-		(int vy, int vx) = DirectionToVector(fromDirection);
-
-		var (cy, cx) = from;
-		(int ny, int nx) = (cy + vy, cx + vx);
-		if (map[ny][nx] != Wall)
-		{
-			toList.Add((new Vertex((ny, nx), fromDirection), 1));
-		}
-
-		// int cost = 0;
-		// var (cy, cx) = from;
-		// while (true)
-		// {
-		// 	(int ny, int nx) = (cy + vy, cx + vx);
-		//
-		// 	if (map[ny][nx] == Wall)
-		// 	{
-		// 		if (cost > 0)
-		// 		{
-		// 			toList.Add((new Vertex((cy, cx), fromDirection), cost));
-		// 		}
-		// 		break;
-		// 	}
-		//
-		// 	++cost;
-		// 	(cy, cx) = (ny, nx);
-		// }
-
-		graph.Add(vFrom, toList);
-		foreach ((Vertex vTo, _) in toList)
-		{
-			CollectAdjacentVertexes(vTo, graph, map);
-		}
 	}
 }
 
@@ -371,11 +280,12 @@ internal sealed class SolverA : SolverBase
 				vCost = kvp.Value;
 				v = kvp.Key;
 			}
+			if (vCost == long.MaxValue) break;
 			finished.Add(v);
 
-			if (!graph.TryGetValue(v, out var nextVertexes)) break;
+			if (!graph.TryGetValue(v, out var nextVertexes)) continue;
 
-			foreach ((Vertex next, int toNextCost) in nextVertexes)
+			foreach ((Vertex next, int toNextCost) in nextVertexes.Where(nv => !finished.Contains(nv.to)))
 			{
 				long nextCost = costs.GetValueOrDefault(next, long.MaxValue);
 				costs[next] = Math.Min(nextCost, vCost + toNextCost);
@@ -387,11 +297,109 @@ internal sealed class SolverA : SolverBase
 	}
 }
 
-
 internal sealed class SolverB : SolverBase
 {
 	protected override long Solve(Map map, Position start, Position end)
 	{
+		var graph = CreateGraph(map, start);
+		Vertex vStart = new Vertex(start, Directions.Right);
+
+		List<PathInfo> paths = [new([vStart], 0L)];
+		List<PathInfo> finished = [];
+
+		while (true)
+		{
+			List<PathInfo> newPaths = [];
+			foreach (PathInfo path in paths)
+			{
+				Vertex last = path.Path.Last();
+				List<PathInfo> nextPaths = [];
+				foreach ((Vertex next, int nextCost) in graph.GetValueOrDefault(last, []))
+				{
+					if (path.Path.Contains(next) || nextCost + path.Cost > 101492)
+					{
+						continue;
+					}
+					nextPaths.Add(new PathInfo(path.Path.Append(next).ToList(), path.Cost + nextCost));
+				}
+				if (nextPaths.Count == 0)
+				{
+					if (last.Position == end)
+					{
+						finished.Add(path);
+					}
+				}
+				else
+				{
+					newPaths.AddRange(nextPaths);
+				}
+			}
+
+			if (newPaths.Count == 0)
+			{
+				break;
+			}
+
+			paths = newPaths;
+		}
+
 		throw new NotImplementedException();
 	}
+
+
+	private sealed record PathInfo(List<Vertex> Path, long Cost);
 }
+
+
+// internal sealed class SolverB : SolverBase
+// {
+// 	protected override long Solve(Map map, Position start, Position end)
+// 	{
+// 		Graph graph = CreateGraph(map, start);
+// 		Vertex vStart = new Vertex(start, Directions.Right);
+//
+// 		HashSet<Vertex> visited = [];
+// 		Dictionary<Vertex, List<PathInfo>> trackingPaths = new() { { vStart, [new([vStart], 0)] } };
+// 		List<Vertex> newVertexes = [vStart];
+//
+// 		while (true)
+// 		{
+// 			Dictionary<Vertex, List<PathInfo>> newPaths = trackingPaths;
+// 			bool hasChanges = true;
+// 			List<Vertex> newVertexes1 = [];
+// 			foreach (var currentKey in newVertexes)
+// 			{
+// 				if (!graph.TryGetValue(currentKey, out var nextVertexes)) continue;
+// 				List<PathInfo> currentPaths = trackingPaths[currentKey];
+// 				foreach (var next in nextVertexes)
+// 				{
+// 					if (!newPaths.TryGetValue(next.to, out var paths))
+// 					{
+// 						paths = new List<PathInfo>();
+// 						newPaths[next.to] = paths;
+// 					}
+// 					List<PathInfo> nextPaths = currentPaths.
+// 						Where(path => !path.Path.Contains(next.to)).
+// 						Select(path => new PathInfo(path.Path.Append(next.to).ToList(), path.Cost + next.cost)).
+// 						ToList();
+// 					int before = paths.Count;
+// 					paths.AddRange(nextPaths);
+// 					if (before < paths.Count)
+// 					{
+// 						hasChanges = true;
+// 					}
+// 				}
+// 			}
+//
+// 			if (!hasChanges)
+// 			{
+// 				break;
+// 			}
+//
+// 			//trackingPaths = newPaths;
+// 		}
+//
+//
+// 		throw new NotImplementedException();
+// 	}
+//}
