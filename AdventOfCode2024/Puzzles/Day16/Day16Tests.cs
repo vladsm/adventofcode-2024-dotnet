@@ -6,7 +6,7 @@ namespace AdventOfCode2024.Puzzles.Day16;
 
 using Position = (int y, int x);
 using Map = char[][];
-using Graph = Dictionary<Vertex, IReadOnlyCollection<(Vertex to, int cost)>>;
+using Costs = Dictionary<(int y, int x), Dictionary<char, long>>;
 
 public sealed class Day16Tests(ITestOutputHelper _output) : PuzzleTestsBase
 {
@@ -96,7 +96,7 @@ internal abstract class SolverBase : SolverWithArrayInput<string, long>
 {
 	private const char Start = 'S';
 	private const char End = 'E';
-	private const char Empty = '.';
+	protected const char Empty = '.';
 	private const char Wall = '#';
 
 	private static readonly char[] _directions = [Directions.Up, Directions.Down, Directions.Right, Directions.Left];
@@ -134,6 +134,7 @@ internal abstract class SolverBase : SolverWithArrayInput<string, long>
 			{
 				end = new Position(y, x);
 				hasEnd = true;
+				map[y][x] = Empty;
 			}
 			if (hasStart && hasEnd) break;
 		}
@@ -154,95 +155,86 @@ internal abstract class SolverBase : SolverWithArrayInput<string, long>
 	}
 
 	private static int RotateCost(char from, char to) =>
-	(from, to) switch
-	{
-		(Directions.Up, Directions.Up) => 0,
-		(Directions.Up, Directions.Down) => 2000,
-		(Directions.Up, Directions.Right) => 1000,
-		(Directions.Up, Directions.Left) => 1000,
-		(Directions.Down, Directions.Up) => 2000,
-		(Directions.Down, Directions.Down) => 0,
-		(Directions.Down, Directions.Right) => 1000,
-		(Directions.Down, Directions.Left) => 1000,
-		(Directions.Left, Directions.Up) => 1000,
-		(Directions.Left, Directions.Down) => 1000,
-		(Directions.Left, Directions.Right) => 2000,
-		(Directions.Left, Directions.Left) => 0,
-		(Directions.Right, Directions.Up) => 1000,
-		(Directions.Right, Directions.Down) => 1000,
-		(Directions.Right, Directions.Right) => 0,
-		(Directions.Right, Directions.Left) => 2000,
-		_ => throw new InvalidOperationException("Invalid directions pair")
-	};
-
-	protected static Graph CreateGraph(Map map, Position start)
-	{
-		var graph = new Graph();
-
-		int sizeY = map.Length;
-		int sizeX = map[0].Length;
-		for (int y = 0; y < sizeY; ++y)
-		for (int x = 0; x < sizeX; ++x)
+		(from, to) switch
 		{
+			(Directions.Up, Directions.Up) => 0,
+			(Directions.Up, Directions.Right) => 1000,
+			(Directions.Up, Directions.Left) => 1000,
+			(Directions.Down, Directions.Down) => 0,
+			(Directions.Down, Directions.Right) => 1000,
+			(Directions.Down, Directions.Left) => 1000,
+			(Directions.Left, Directions.Up) => 1000,
+			(Directions.Left, Directions.Down) => 1000,
+			(Directions.Left, Directions.Left) => 0,
+			(Directions.Right, Directions.Up) => 1000,
+			(Directions.Right, Directions.Down) => 1000,
+			(Directions.Right, Directions.Right) => 0,
+			_ => -1
+		};
+
+	protected sealed record PosDir(Position Position, char Direction);
+
+	protected static long GetCostTo(Position to, Costs costs) =>
+		costs[to].Values.Min();
+
+	protected static Costs CalculateCosts(Position from, char fromDirection, Map map)
+	{
+		Costs result = [];
+		foreach (char direction in _directions)
+		{
+			for (int y = 0; y < map.Length; ++y)
+			for (int x = 0; x < map[y].Length; ++x)
+			{
+				if (map[y][x] != Empty) continue;
+				if (result.TryGetValue((y, x), out Dictionary<char, long>? directionsResult))
+				{
+					directionsResult[direction] = long.MaxValue;
+				}
+				else
+				{
+					result.Add((y, x), new Dictionary<char, long>{{direction, long.MaxValue}});
+				}
+			}
+		}
+		result[from][fromDirection] = 0;
+
+		PriorityQueue<PosDir, long> states = new();
+		HashSet<PosDir> finished = [];
+		states.Enqueue(new(from, fromDirection), 0);
+
+		while (states.Count > 0)
+		{
+			var vState = states.Dequeue();
+			if (!finished.Add(vState)) continue;
+
+			(Position v, char vDirection) = vState;
+			(int vy, int vx) = v;
+			long vCost = result[v][vDirection];
+
 			foreach (char direction in _directions)
 			{
-				CollectAdjacentVertexes(new Vertex((y, x), direction), graph, map);
-			}
-		}
-
-		return graph;
-	}
-
-	private static bool IsGraphVertex(int y, int x, Map map)
-	{
-		bool notVertex =
-			map[y - 1][x] == Empty && map[y + 1][x] == Empty && map[y][x - 1] != Empty && map[y][x + 1] != Empty ||
-			map[y - 1][x] != Empty && map[y + 1][x] != Empty && map[y][x - 1] == Empty && map[y][x + 1] == Empty;
-		return !notVertex;
-	}
-
-	private static void CollectAdjacentVertexes(Vertex vFrom, Graph graph, Map map)
-	{
-		(Position from, char fromDirection) = vFrom;
-		var (cy, cx) = from;
-		if (map[cy][cx] == Wall) return;
-		if (!IsGraphVertex(cy, cx, map)) return;
-
-		List<(Vertex, int)> toList = new();
-
-		var rotations = _directions.
-			Where(d => d != fromDirection).
-			Select(d => (new Vertex(from, d), RotateCost(fromDirection, d))).
-			ToList();
-		toList.AddRange(rotations);
-
-		(int vy, int vx) = DirectionToVector(fromDirection);
-
-		int cost = 0;
-		while (true)
-		{
-			(int ny, int nx) = (cy + vy, cx + vx);
-
-			if (map[ny][nx] == Wall)
-			{
-				if (cost > 0)
+				int rotateCost = RotateCost(vDirection, direction);
+				if (rotateCost < 0) continue;
+				(int dy, int dx) = DirectionToVector(direction);
+				(int ny, int nx) = (vy + dy, vx + dx);
+				char ch = map[ny][nx];
+				if (ch == Wall) continue;
+				long nCost = vCost + rotateCost + 1;
+				long nPrevCost = result[(ny, nx)][direction];
+				if (nPrevCost > nCost)
 				{
-					toList.Add((new Vertex((cy, cx), fromDirection), cost));
+					result[(ny, nx)][direction] = nCost;
 				}
-				break;
+				else
+				{
+					nCost = nPrevCost;
+				}
+				var next = new PosDir((ny, nx), direction);
+				states.Enqueue(next, nCost);
 			}
-
-			++cost;
-			if (IsGraphVertex(ny, nx, map))
-			{
-				toList.Add((new Vertex((ny, nx), fromDirection), cost));
-				break;
-			}
-
-			(cy, cx) = (ny, nx);
 		}
 
-		graph.Add(vFrom, toList);
+		return result;
 	}
 }
 
@@ -258,148 +250,38 @@ internal sealed class SolverA : SolverBase
 {
 	protected override long Solve(Map map, Position start, Position end)
 	{
-		var graph = CreateGraph(map, start);
-
-		Dictionary<Vertex, long> costs = new();
-		foreach (Vertex v in graph.Keys)
-		{
-			costs.Add(v, long.MaxValue - 1);
-		}
-
-		var vStart = new Vertex(start, Directions.Right);
-		costs[vStart] = 0;
-
-		HashSet<Vertex> finished = new();
-		while (true)
-		{
-			long vCost = long.MaxValue;
-			Vertex v = new();
-			foreach (var kvp in costs.Where(kvp => !finished.Contains(kvp.Key)))
-			{
-				if (kvp.Value >= vCost) continue;
-				vCost = kvp.Value;
-				v = kvp.Key;
-			}
-			if (vCost == long.MaxValue) break;
-			finished.Add(v);
-
-			if (!graph.TryGetValue(v, out var nextVertexes)) continue;
-
-			foreach ((Vertex next, int toNextCost) in nextVertexes.Where(nv => !finished.Contains(nv.to)))
-			{
-				long nextCost = costs.GetValueOrDefault(next, long.MaxValue);
-				costs[next] = Math.Min(nextCost, vCost + toNextCost);
-			}
-		}
-
-		long result = costs.Where(v => v.Key.Position == end).Min(v => v.Value);
-		return result;
+		Costs costs = CalculateCosts(start, Directions.Right, map);
+		return GetCostTo(end, costs);
 	}
 }
+
 
 internal sealed class SolverB : SolverBase
 {
 	protected override long Solve(Map map, Position start, Position end)
 	{
-		var graph = CreateGraph(map, start);
-		Vertex vStart = new Vertex(start, Directions.Right);
+		Costs costsFromStart = CalculateCosts(start, Directions.Right, map);
+		long startToEndCost = GetCostTo(end, costsFromStart);
 
-		List<PathInfo> paths = [new([vStart], 0L)];
-		List<PathInfo> finished = [];
-
-		while (true)
+		int result = 0;
+		for (int y = 0; y < map.Length; ++y)
+		for (int x = 0; x < map[y].Length; ++x)
 		{
-			List<PathInfo> newPaths = [];
-			foreach (PathInfo path in paths)
+			if (map[y][x] != Empty) continue;
+
+			foreach ((char fromDir, long fromStart) in costsFromStart[(y, x)])
 			{
-				Vertex last = path.Path.Last();
-				List<PathInfo> nextPaths = [];
-				foreach ((Vertex next, int nextCost) in graph.GetValueOrDefault(last, []))
+				if (fromStart > startToEndCost) continue;
+
+				Costs costsToEnd = CalculateCosts((y, x), fromDir, map);
+				long toEnd = GetCostTo(end, costsToEnd);
+				if (startToEndCost == fromStart + toEnd)
 				{
-					if (path.Path.Contains(next) || nextCost + path.Cost > 101492)
-					{
-						continue;
-					}
-					nextPaths.Add(new PathInfo(path.Path.Append(next).ToList(), path.Cost + nextCost));
-				}
-				if (nextPaths.Count == 0)
-				{
-					if (last.Position == end)
-					{
-						finished.Add(path);
-					}
-				}
-				else
-				{
-					newPaths.AddRange(nextPaths);
+					++result;
+					break;
 				}
 			}
-
-			if (newPaths.Count == 0)
-			{
-				break;
-			}
-
-			paths = newPaths;
 		}
-
-		throw new NotImplementedException();
+		return result;
 	}
-
-
-	private sealed record PathInfo(List<Vertex> Path, long Cost);
 }
-
-
-// internal sealed class SolverB : SolverBase
-// {
-// 	protected override long Solve(Map map, Position start, Position end)
-// 	{
-// 		Graph graph = CreateGraph(map, start);
-// 		Vertex vStart = new Vertex(start, Directions.Right);
-//
-// 		HashSet<Vertex> visited = [];
-// 		Dictionary<Vertex, List<PathInfo>> trackingPaths = new() { { vStart, [new([vStart], 0)] } };
-// 		List<Vertex> newVertexes = [vStart];
-//
-// 		while (true)
-// 		{
-// 			Dictionary<Vertex, List<PathInfo>> newPaths = trackingPaths;
-// 			bool hasChanges = true;
-// 			List<Vertex> newVertexes1 = [];
-// 			foreach (var currentKey in newVertexes)
-// 			{
-// 				if (!graph.TryGetValue(currentKey, out var nextVertexes)) continue;
-// 				List<PathInfo> currentPaths = trackingPaths[currentKey];
-// 				foreach (var next in nextVertexes)
-// 				{
-// 					if (!newPaths.TryGetValue(next.to, out var paths))
-// 					{
-// 						paths = new List<PathInfo>();
-// 						newPaths[next.to] = paths;
-// 					}
-// 					List<PathInfo> nextPaths = currentPaths.
-// 						Where(path => !path.Path.Contains(next.to)).
-// 						Select(path => new PathInfo(path.Path.Append(next.to).ToList(), path.Cost + next.cost)).
-// 						ToList();
-// 					int before = paths.Count;
-// 					paths.AddRange(nextPaths);
-// 					if (before < paths.Count)
-// 					{
-// 						hasChanges = true;
-// 					}
-// 				}
-// 			}
-//
-// 			if (!hasChanges)
-// 			{
-// 				break;
-// 			}
-//
-// 			//trackingPaths = newPaths;
-// 		}
-//
-//
-// 		throw new NotImplementedException();
-// 	}
-//}
