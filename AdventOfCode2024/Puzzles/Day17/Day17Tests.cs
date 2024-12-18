@@ -11,15 +11,15 @@ public sealed class Day17Tests(ITestOutputHelper _output) : PuzzleTestsBase
 	{
 		string input =
 			"""
-			Register A: 729
+			Register A: 2024
 			Register B: 0
 			Register C: 0
 			
-			Program: 0,1,5,4,3,0
+			Program: 0,3,5,4,3,0
 			""";
 
 		string[] lines = input.Split("\r\n");
-		string result = await new SolverA().Solve(lines.ToAsyncEnumerable());
+		string result = await new SolverB(_output).Solve(lines.ToAsyncEnumerable());
 		_output.WriteLine($"Result: {result}");
 	}
 
@@ -38,7 +38,7 @@ public sealed class Day17Tests(ITestOutputHelper _output) : PuzzleTestsBase
 	{
 		await Runner.
 			Puzzle(2024, day: 17, level: 2).
-			SolveUsing<string, string, SolverB>().
+			SolveUsing(new SolverB(_output)).
 			AssertingResult(line => line).
 			Run(_output);
 	}
@@ -74,9 +74,9 @@ internal abstract class SolverBase : SolverWithArrayInput<string, string>
 internal sealed class Program
 {
 	private readonly byte[] _instructions;
+	private long _a;
 	private long _b;
 	private long _c;
-	private long _a;
 	private int _pointer;
 	private readonly List<string> _out = new();
 
@@ -88,12 +88,56 @@ internal sealed class Program
 		_c = registerC;
 	}
 
+	public long RegisterA => _a;
+
+	public long RegisterB => _b;
+
+	public long RegisterC => _c;
+
+	public byte[] Instructions => _instructions;
+
+	public void Reset(long registerA, long registerB, long registerC)
+	{
+		_a = registerA;
+		_b = registerB;
+		_c = registerC;
+		_pointer = 0;
+		_out.Clear();
+	}
+
 	public string GetOutput() =>
 		string.Join(',', _out);
 
 	public void Run()
 	{
 		while (RunStep());
+	}
+
+	public bool RunWithOutputValidation(string[] targetOutput)
+	{
+		int targetOutCount = targetOutput.Length;
+		while (RunStep())
+		{
+			int outCount = _out.Count;
+			if (outCount > targetOutCount || outCount > 0 && targetOutput[outCount - 1] != _out[outCount - 1])
+			{
+				return false;
+			}
+		}
+		return _out.Count == targetOutCount && targetOutput[targetOutCount - 1] == _out[targetOutCount - 1];
+	}
+
+	public bool RunWithOutputValidation(string targetOutput)
+	{
+		while (RunStep())
+		{
+			int outCount = _out.Count;
+			if (outCount > 0 && _out[0] == targetOutput)
+			{
+				return true;
+			}
+		}
+		return false;
 	}
 
 
@@ -230,8 +274,65 @@ internal sealed class SolverA : SolverBase
 
 internal sealed class SolverB : SolverBase
 {
+	private readonly ITestOutputHelper _log;
+
+	public SolverB(ITestOutputHelper log)
+	{
+		_log = log;
+	}
+
 	protected override string Solve(Program program)
 	{
+		long initialRegisterB = program.RegisterB;
+		long initialRegisterC = program.RegisterC;
+
+		string[] targetOutput = program.Instructions.Select(i => i.ToString()).ToArray();
+
+		List<long> aComponents = [];
+		foreach (string item in targetOutput)
+		{
+			long componentACandidate = -1;
+			while (true)
+			{
+				program.Reset(++componentACandidate, initialRegisterB, initialRegisterC);
+				bool isValid = program.RunWithOutputValidation(item);
+				if (isValid) break;
+			}
+			aComponents.Add(componentACandidate);
+		}
+
+		long pow = 1;
+		long A = 0;
+		for (int i = 0; i < aComponents.Count; ++i)
+		{
+			long a = aComponents[i];
+			A += a * pow;
+			pow *= 8;
+		}
+
+
 		throw new NotImplementedException();
 	}
+
+	// protected override string Solve(Program program)
+	// {
+	// 	long initialRegisterB = program.RegisterB;
+	// 	long initialRegisterC = program.RegisterC;
+	//
+	// 	string[] targetOutput = program.Instructions.Select(i => i.ToString()).ToArray();
+	// 	//long registerACandidate = -1;
+	// 	long registerACandidate = 1999;
+	// 	while (true)
+	// 	{
+	// 		program.Reset(++registerACandidate, initialRegisterB, initialRegisterC);
+	// 		bool isValid = program.RunWithOutputValidation(targetOutput);
+	// 		if (isValid) break;
+	// 		if (registerACandidate % 100_000_000 == 0)
+	// 		{
+	// 			_log.WriteLine($"A={registerACandidate}");
+	// 		}
+	// 	}
+	//
+	// 	return registerACandidate.ToString();
+	// }
 }
