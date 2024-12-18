@@ -19,7 +19,7 @@ public sealed class Day17Tests(ITestOutputHelper _output) : PuzzleTestsBase
 			""";
 
 		string[] lines = input.Split("\r\n");
-		string result = await new SolverB(_output).Solve(lines.ToAsyncEnumerable());
+		string result = await new SolverA().Solve(lines.ToAsyncEnumerable());
 		_output.WriteLine($"Result: {result}");
 	}
 
@@ -161,8 +161,7 @@ internal sealed class Program
 	private bool Adv()
 	{
 		if (!TryReadComboOperand(out long operand)) return false;
-		long denominator = 1L << (int)operand;
-		_a /= denominator;
+		_a >>= (int)operand;
 		return true;
 	}
 
@@ -207,16 +206,14 @@ internal sealed class Program
 	private bool Bdv()
 	{
 		if (!TryReadComboOperand(out long operand)) return false;
-		long denominator = 1L << (int)operand;
-		_b = _a / denominator;
+		_b = _a >> (int)operand;
 		return true;
 	}
 
 	private bool Cdv()
 	{
 		if (!TryReadComboOperand(out long operand)) return false;
-		long denominator = 1L << (int)operand;
-		_c = _a / denominator;
+		_c = _a >> (int)operand;
 		return true;
 	}
 
@@ -288,51 +285,46 @@ internal sealed class SolverB : SolverBase
 
 		string[] targetOutput = program.Instructions.Select(i => i.ToString()).ToArray();
 
-		List<long> aComponents = [];
-		foreach (string item in targetOutput)
+		long registerACandidate = -1;
+		for (int i = targetOutput.Length - 1; i >= 0; i -= 1)
 		{
-			long componentACandidate = -1;
+			string[] subTarget = targetOutput.Skip(i).ToArray();
 			while (true)
 			{
-				program.Reset(++componentACandidate, initialRegisterB, initialRegisterC);
-				bool isValid = program.RunWithOutputValidation(item);
+				program.Reset(++registerACandidate, initialRegisterB, initialRegisterC);
+				bool isValid = program.RunWithOutputValidation(subTarget);
 				if (isValid) break;
+
+				if (registerACandidate % 500_000_000 == 0)
+				{
+					_log.WriteLine($"A={registerACandidate}");
+				}
 			}
-			aComponents.Add(componentACandidate);
+
+			_log.WriteLine($"Skip {i}: A = {registerACandidate}");
+			if (i > 0)
+			{
+				registerACandidate = (registerACandidate << 3) - 1;
+			}
 		}
 
-		long pow = 1;
-		long A = 0;
-		for (int i = 0; i < aComponents.Count; ++i)
-		{
-			long a = aComponents[i];
-			A += a * pow;
-			pow *= 8;
-		}
-
-
-		throw new NotImplementedException();
+		return registerACandidate.ToString();
 	}
 
-	// protected override string Solve(Program program)
-	// {
-	// 	long initialRegisterB = program.RegisterB;
-	// 	long initialRegisterC = program.RegisterC;
-	//
-	// 	string[] targetOutput = program.Instructions.Select(i => i.ToString()).ToArray();
-	// 	//long registerACandidate = -1;
-	// 	long registerACandidate = 1999;
-	// 	while (true)
-	// 	{
-	// 		program.Reset(++registerACandidate, initialRegisterB, initialRegisterC);
-	// 		bool isValid = program.RunWithOutputValidation(targetOutput);
-	// 		if (isValid) break;
-	// 		if (registerACandidate % 100_000_000 == 0)
-	// 		{
-	// 			_log.WriteLine($"A={registerACandidate}");
-	// 		}
-	// 	}
-	//
-	// 	return registerACandidate.ToString();
-	// }
+// Skip 15: A = 6
+// Skip 14: A = 49
+// Skip 13: A = 393
+// Skip 12: A = 3145
+// Skip 11: A = 25214
+// Skip 10: A = 201717
+// Skip 9: A = 1613736
+// Skip 8: A = 12909892
+// Skip 7: A = 103279138
+// Skip 6: A = 826236710
+// Skip 5: A = 6609893682
+// Skip 4: A = 57751046804
+// Skip 3: A = 462008374436
+// Skip 2: A = 3696066995494
+// Skip 1: A = 29568535964101
+// Skip 0: A = 236548287712877
 }
