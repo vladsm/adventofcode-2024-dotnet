@@ -1,6 +1,4 @@
-﻿using System.Text;
-
-using AdventOfCode;
+﻿using AdventOfCode;
 
 using Xunit.Abstractions;
 
@@ -49,46 +47,107 @@ public sealed class Day21Tests(ITestOutputHelper _output) : PuzzleTestsBase
 
 internal abstract class Pad
 {
-	protected abstract Dictionary<char, Dictionary<char, string>> Moves { get; }
+	private static readonly Dictionary<(int cy, int cx), string[]> _permutations = new()
+	{
+		{(3, 2), ["yyyxx", "yyxyx", "yyxxy", "yxyyx", "yxyxy", "yxxyy", "xyyyx", "xyyxy", "xyxyy", "xxyyy"]},
+		{(2, 2), ["yyxx", "yxyx", "yxxy", "xyyx", "xyxy", "xxyy"]},
+		{(1, 2), ["yxx", "xyx", "xxy"]},
+		{(3, 1), ["yyyx", "yyxy", "yxyy", "xyyy"]},
+		{(2, 1), ["yyx", "yxy", "xyy"]},
+		{(1, 1), ["yx", "xy"]}
+	};
 
-	public string GetMoves(char from, char to) => Moves[from][to];
+	protected abstract string[] Lines { get; }
+
+	public IEnumerable<string> GetMovesOptions(char from, char to)
+	{
+		string[] pad = Lines;
+
+		int sizeY = pad.Length;
+		int sizeX = pad[0].Length;
+
+		(int fromY, int fromX) = (-1, -1);
+		(int toY, int toX) = (-1, -1);
+		for (int y = 0; y < sizeY; ++y)
+		for (int x = 0; x < sizeX; ++x)
+		{
+			char ch = pad[y][x];
+			if (from == ch) (fromY, fromX) = (y, x);
+			if (to == ch) (toY, toX) = (y, x);
+		}
+		if (fromY == -1 || fromX == -1 || toY == -1 || toX == -1) yield break;
+
+		(int dy, int dx) = (toY - fromY, toX - fromX);
+		if (dy == 0 && dx == 0)
+		{
+			yield return "";
+			yield break;
+		}
+
+		char yMoveCh = dy > 0 ? '^' : 'v';
+		char xMoveCh = dx > 0 ? '>' : '<';
+		if (dy == 0)
+		{
+			yield return new string(xMoveCh, Math.Abs(dx));
+			yield break;
+		}
+		if (dx == 0)
+		{
+			yield return new string(yMoveCh, Math.Abs(dy));
+			yield break;
+		}
+
+		int yMove = dy > 0 ? 1 : -1;
+		int xMove = dx > 0 ? 1 : -1;
+		foreach (string permutation in _permutations[(Math.Abs(dy), Math.Abs(dx))])
+		{
+			if (!IsValidPermutation(permutation, fromY, fromX, yMove, xMove, pad)) continue;
+			yield return PermutationToMoves(permutation, yMoveCh, xMoveCh);
+		}
+	}
+
+	private static string PermutationToMoves(string permutation, char yCh, char xCh) =>
+		new(permutation.Select(ch => ch == 'y' ? yCh : xCh).ToArray());
+
+	private static bool IsValidPermutation(string permutation, int fromY, int fromX, int dy, int dx, string[] pad)
+	{
+		(int y, int x) = (fromY, fromX);
+		foreach (char ch in permutation)
+		{
+			(y, x) = ch == 'y' ? (y + dy, x) : (y, x + dx);
+			if (pad[y][x] == ' ') return false;
+		}
+		return true;
+	}
 }
 
 internal sealed class DigitsPad : Pad
 {
-	protected override Dictionary<char, Dictionary<char, string>> Moves { get; } = new()
-	{
-		{'0', new() {{'0', ""}, {'A', ">"}, {'1', "^<"}, {'2', "^"}, {'3', "^>"}, {'4', "^^<"}, {'5', "^^"}, {'6', "^^>"}, {'7', "^^^<"}, {'8', "^^^"}, {'9', "^^^>"}}},
-		{'A', new() {{'0', "<"}, {'A', ""}, {'1', "^<<"}, {'2', "^<"}, {'3', "^"}, {'4', "^^<<"}, {'5', "^^<"}, {'6', "^^"}, {'7', "^^^<<"}, {'8', "^^^<"}, {'9', "^^^"}}},
-		{'1', new() {{'0', ">v"}, {'A', ">>v"}, {'1', ""}, {'2', ">"}, {'3', ">>"}, {'4', "^"}, {'5', "^>"}, {'6', "^>>"}, {'7', "^^"}, {'8', "^^>"}, {'9', "^^>>"}}},
-		{'2', new() {{'0', "v"}, {'A', ">v"}, {'1', "<"}, {'2', ""}, {'3', ">"}, {'4', "^<"}, {'5', "^"}, {'6', "^>"}, {'7', "^^<"}, {'8', "^^"}, {'9', "^^>"}}},
-		{'3', new() {{'0', "v<"}, {'A', "v"}, {'1', "<<"}, {'2', "<"}, {'3', ""}, {'4', "^<<"}, {'5', "^<"}, {'6', "^"}, {'7', "^^<<"}, {'8', "^^<"}, {'9', "^^"}}},
-		{'4', new() {{'0', ">vv"}, {'A', ">>vv"}, {'1', "v"}, {'2', ">v"}, {'3', ">>v"}, {'4', ""}, {'5', ">"}, {'6', ">>"}, {'7', "^"}, {'8', "^>"}, {'9', "^>>"}}},
-		{'5', new() {{'0', "vv"}, {'A', ">vv"}, {'1', "<v"}, {'2', "v"}, {'3', ">v"}, {'4', "<"}, {'5', ""}, {'6', ">"}, {'7', "^<"}, {'8', "^"}, {'9', "^>"}}},
-		{'6', new() {{'0', "vv<"}, {'A', "vv"}, {'1', "<<v"}, {'2', "<v"}, {'3', "v"}, {'4', "<<"}, {'5', "<"}, {'6', ""}, {'7', "^<<"}, {'8', "^<"}, {'9', "^"}}},
-		{'7', new() {{'0', ">vvv"}, {'A', ">>vvv"}, {'1', "vv"}, {'2', ">vv"}, {'3', ">>vv"}, {'4', "v"}, {'5', ">v"}, {'6', ">>v"}, {'7', ""}, {'8', ">"}, {'9', ">>"}}},
-		{'8', new() {{'0', "vvv"}, {'A', ">vvv"}, {'1', "<vv"}, {'2', "vv"}, {'3', ">vv"}, {'4', "<v"}, {'5', "v"}, {'6', ">v"}, {'7', "<"}, {'8', ""}, {'9', ">"}}},
-		{'9', new() {{'0', "vvv<"}, {'A', "vvv"}, {'1', "<<vv"}, {'2', "<vv"}, {'3', "vv"}, {'4', "<<v"}, {'5', "<v"}, {'6', "v"}, {'7', "<<"}, {'8', "<"}, {'9', ""}}}
-	};
+	protected override string[] Lines { get; } =
+	[
+		" 0A",
+		"123",
+		"456",
+		"789"
+	];
 }
 
 internal sealed class DirectionsPad : Pad
 {
-	protected override Dictionary<char, Dictionary<char, string>> Moves { get; } = new()
-	{
-		{'<', new() {{'<', ""}, {'v', ">"}, {'>', ">>"}, {'^', ">^"}, {'A', ">>^"}}},
-		{'v', new() {{'<', "<"}, {'v', ""}, {'>', ">"}, {'^', "^"}, {'A', ">^"}}},
-		{'>', new() {{'<', "<<"}, {'v', "<"}, {'>', ""}, {'^', "<^"}, {'A', "^"}}},
-		{'^', new() {{'<', "v<"}, {'v', "v"}, {'>', "v>"}, {'^', ""}, {'A', ">"}}},
-		{'A', new() {{'<', "v<<"}, {'v', "v<"}, {'>', "v"}, {'^', "<"}, {'A', ""}}}
-	};
+	protected override string[] Lines { get; } =
+	[
+		"<v>",
+		" ^A"
+	];
 }
 
 
 internal sealed class Robot
 {
+	private Dictionary<(char from, char to), long> _memo = [];
+
 	public Pad Pad { get; }
-	public Robot? Driver { get; }
+	public Robot? Driver { get; set; }
 	public char Current { get; set; }
 
 	public Robot(Pad pad, Robot? driver, char current)
@@ -98,107 +157,121 @@ internal sealed class Robot
 		Current = current;
 	}
 
+	public long FromMemo(char from, char to) =>
+		_memo.GetValueOrDefault((from, to), -1);
+
+	public void ToMemo(char from, char to, long length) =>
+		_memo[(from, to)] = length;
+
 	public void Reset()
 	{
 		var robot = this;
 		while (robot is not null)
 		{
 			robot.Current = 'A';
+			robot._memo = [];
 			robot = robot.Driver;
 		}
+	}
+
+	public Robot Clone()
+	{
+		var cloned = new Robot(Pad, Driver?.Clone(), Current)
+		{
+			_memo = _memo
+		};
+		return cloned;
 	}
 }
 
 
 internal static class PadsExtensions
 {
-	public static void Press(this Robot robot, char to, StringBuilder tracker)
+	public static long Enter(this Robot robot, string code)
 	{
-		string moves = robot.Pad.GetMoves(robot.Current, to);
+		long result = 0L;
+		foreach (char digit in code)
+		{
+			result += robot.Press(digit);
+		}
+		return result;
+	}
+
+	public static long Press(this Robot robot, char to)
+	{
+		var from = robot.Current;
+		long fromMemo = robot.FromMemo(from, to);
+		if (fromMemo >= 0) return fromMemo;
+
+		string[] movesOptions = robot.Pad.GetMovesOptions(from, to).ToArray();
 		robot.Current = to;
 		Robot? driver = robot.Driver;
 		if (driver is null)
 		{
-			tracker.Append(moves);
-			tracker.Append('A');
-			return;
+			if (movesOptions.Length == 0) return 0;
+			long result = movesOptions.MinBy(m => m.Length)!.Length + 1;
+			robot.ToMemo(from, to, result);
+			return result;
 		}
 
-		foreach (char move in moves.Concat(['A']))
+		long resultMovesLength = -1;
+		Robot? resultDriver = null;
+		foreach (string moves in movesOptions)
 		{
-			driver.Press(move, tracker);
-			driver.Current = move;
+			driver = driver.Clone();
+			long length = 0;
+			foreach (char move in moves.Concat(['A']))
+			{
+				length += driver.Press(move);
+				driver.Current = move;
+			}
+			if (resultMovesLength < 0 || resultMovesLength > length)
+			{
+				resultMovesLength = length;
+				resultDriver = driver;
+			}
 		}
+		if (resultDriver is not null)
+		{
+			robot.Driver = resultDriver;
+		}
+		robot.ToMemo(from, to, resultMovesLength < 0 ? 0L : resultMovesLength);
+		return resultMovesLength < 0 ? 0L : resultMovesLength;
 	}
 }
 
 
-internal sealed class SolverA : SolverWithArrayInput<string, long>
+internal abstract class SolverBase : SolverWithArrayInput<string, long>
 {
+	protected abstract Robot CreateRobot();
+
 	protected override long Solve(string[] codes)
 	{
-		var robot = new Robot(
-			new DigitsPad(),
-			new Robot(
-				new DirectionsPad(),
-				new Robot(
-					new DirectionsPad(),
-					new Robot(new DirectionsPad(), null, 'A'),
-					'A'
-					),
-				'A'
-				),
-			'A'
-			);
-
-		var robot1 = new Robot(
-			new DigitsPad(),
-			new Robot(
-				new DirectionsPad(),
-				new Robot(new DirectionsPad(), null, 'A'),
-				'A'
-				),
-			'A'
-			);
-
-
-		var robot2 = new Robot(new DirectionsPad(), null, 'A');
-		var tracker2 = new StringBuilder();
-		foreach (char digit in "<A>A<AAv<AA>>^AvAA^Av<AAA>^A")
-		{
-			//379A
-			//^A^^<<A>>AvvvA
-			//<A>A<AAv<AA>>^AvAA^Av<AAA>^A
-			//v<<A>>^AvA^Av<<A>>^AAv<A<A>>^AAvAA<^A>Av<A>^AA<A>Av<A<A>>^AAAvA<^A>A
-			robot2.Press(digit, tracker2);
-		}
-
+		Robot robot = CreateRobot();
 
 		long result = 0L;
 		foreach (string code in codes)
 		{
-			var tracker = new StringBuilder();
-			foreach (char digit in code)
-			{
-				robot1.Press(digit, tracker);
-			}
-			robot1.Reset();
-
-			result += tracker.Length * NumericPart(code);
+			long length = robot.Enter(code);
+			result += length * NumericPart(code);
+			robot.Reset();
 		}
-
 		return result;
 	}
+
+	protected static Robot? CreateRobot(int depth) =>
+		depth == 0 ? null : new Robot(new DirectionsPad(), CreateRobot(depth - 1), 'A');
 
 	private static long NumericPart(string code) =>
 		int.Parse(code.AsSpan(0, code.Length - 1));
 }
 
-
-internal sealed class SolverB : SolverWithArrayInput<string, long>
+internal sealed class SolverA : SolverBase
 {
-	protected override long Solve(string[] codes)
-	{
-		throw new NotImplementedException();
-	}
+	protected override Robot CreateRobot() => new(new DigitsPad(), CreateRobot(2), 'A');
+}
+
+internal sealed class SolverB : SolverBase
+{
+	protected override Robot CreateRobot() => new(new DigitsPad(), CreateRobot(25), 'A');
 }
