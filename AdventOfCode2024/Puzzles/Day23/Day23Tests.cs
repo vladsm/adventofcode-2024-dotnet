@@ -1,4 +1,6 @@
-﻿using AdventOfCode;
+﻿using System.Collections;
+
+using AdventOfCode;
 
 using Xunit.Abstractions;
 
@@ -49,7 +51,7 @@ public sealed class Day23Tests(ITestOutputHelper _output) : PuzzleTestsBase
 			""";
 
 		string[] lines = input.Split("\r\n");
-		long result = await new SolverA().Solve(lines.ToAsyncEnumerable());
+		string result = await new SolverB().Solve(lines.ToAsyncEnumerable());
 		_output.WriteLine($"Result: {result}");
 	}
 
@@ -58,7 +60,7 @@ public sealed class Day23Tests(ITestOutputHelper _output) : PuzzleTestsBase
 	{
 		await Runner.
 			Puzzle(2024, day: 23, level: 1).
-			SolveUsing<string, long, SolverA>().
+			SolveUsing<string, string, SolverA>().
 			AssertingResult(line => line).
 			Run(_output);
 	}
@@ -68,16 +70,16 @@ public sealed class Day23Tests(ITestOutputHelper _output) : PuzzleTestsBase
 	{
 		await Runner.
 			Puzzle(2024, day: 23, level: 2).
-			SolveUsing<string, long, SolverB>().
+			SolveUsing<string, string, SolverB>().
 			AssertingResult(line => line).
 			Run(_output);
 	}
 }
 
 
-internal abstract class SolverBase : SolverWithArrayInput<string, long>
+internal abstract class SolverBase : SolverWithArrayInput<string, string>
 {
-	protected override long Solve(string[] lines)
+	protected override string Solve(string[] lines)
 	{
 		Link[] links = lines.Select(parse).ToArray();
 		return Solve(links);
@@ -89,13 +91,13 @@ internal abstract class SolverBase : SolverWithArrayInput<string, long>
 		}
 	}
 
-	protected abstract long Solve(Link[] links);
+	protected abstract string Solve(Link[] links);
 }
 
 
 internal sealed class SolverA : SolverBase
 {
-	protected override long Solve(Link[] links)
+	protected override string Solve(Link[] links)
 	{
 		var allComputers = links.SelectMany<Link, string>(l => [l.computer1, l.computer2]).ToHashSet();
 
@@ -118,7 +120,7 @@ internal sealed class SolverA : SolverBase
 			resultSet.Add(new LinkedComputers([computer1, computer2, computer3]));
 		}
 
-		return resultSet.Count;
+		return resultSet.Count.ToString();
 	}
 
 	private sealed class LinkedComputers
@@ -160,8 +162,72 @@ internal sealed class SolverA : SolverBase
 
 internal sealed class SolverB : SolverBase
 {
-	protected override long Solve(Link[] links)
+	protected override string Solve(Link[] links)
 	{
-		throw new NotImplementedException();
+		LinkMap map = links.
+			Concat(links.Select(l => (Link)(l.computer2, l.computer1))).
+			GroupBy(l => l.computer1).
+			ToDictionary(g => g.Key, g => g.Select(l => l.computer2).ToHashSet());
+
+		IReadOnlyCollection<string> party = [];
+		foreach (var (computer, linkedSet) in map)
+		{
+			int minSize = Math.Max(4, party.Count);
+			var candidate = FindMaxParty(computer, linkedSet, minSize, map);
+			if (candidate.Count <= party.Count) continue;
+			party = candidate;
+		}
+		string result = string.Join(',', party.OrderBy(computer => computer));
+		return result;
+	}
+
+	private IReadOnlyCollection<string> FindMaxParty(string computer, HashSet<string> linkedSet, int minSize, LinkMap map)
+	{
+		int linkedSetCount = linkedSet.Count;
+		if (minSize > linkedSetCount) return [];
+
+		string[] linkedArray = linkedSet.ToArray();
+		IReadOnlyCollection<string> party = [];
+		foreach (IReadOnlyList<string> linkedSubset in GetLinkedSubsetOptions(linkedArray, minSize - 1))
+		{
+			if (linkedSubset.Count <= party.Count) continue;
+			if (!IsParty(linkedSubset, map)) continue;
+			party = linkedSubset;
+		}
+		return party.Concat([computer]).ToList();
+	}
+
+	private static IEnumerable<IReadOnlyList<string>> GetLinkedSubsetOptions(string[] linkedArray, int minSize)
+	{
+		int length = linkedArray.Length;
+		foreach (int optionIndex in Enumerable.Range(0, 2 << length))
+		{
+			var bits = new BitArray([optionIndex]);
+			List<string> subset = new();
+			for (int i = 0; i < length; ++i)
+			{
+				if (bits[i])
+				{
+					subset.Add(linkedArray[i]);
+				}
+			}
+			if (subset.Count >= minSize)
+			{
+				yield return subset;
+			}
+		}
+	}
+
+	private static bool IsParty(IReadOnlyList<string> computers, LinkMap map)
+	{
+		for (int i = 0; i < computers.Count; ++i)
+		{
+			HashSet<string> linkedSet = map[computers[i]];
+			for (int j = i + 1; j < computers.Count; ++j)
+			{
+				if (!linkedSet.Contains(computers[j])) return false;
+			}
+		}
+		return true;
 	}
 }
