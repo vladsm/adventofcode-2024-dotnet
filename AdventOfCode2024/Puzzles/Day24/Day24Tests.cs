@@ -1,4 +1,5 @@
-﻿using System.Text.RegularExpressions;
+﻿using System.Collections;
+using System.Text.RegularExpressions;
 
 using AdventOfCode;
 
@@ -169,26 +170,41 @@ internal abstract partial class SolverBase : SolverWithArrayInput<string, long>
 }
 
 
-internal sealed class SolverA : SolverBase
+internal sealed class Calculator
 {
-	protected override long Solve(VarValue[] initials, Operation[] operations)
+	private readonly Operation[] _operations;
+	private readonly int _size;
+	private readonly OperationsMap _operationsMap;
+
+	public Calculator(Operation[] operations, int size)
 	{
-		OperationsMap operationsMap = operations.
-			//Concat(operations.Select(o => (Operation)(o.in2, o.in1, o.op, o.result))).
+		_operations = operations;
+		_size = size;
+		_operationsMap = operations.
 			GroupBy(
 				o => o.in1,
 				(in1, in1Operations) => (in1, in2ops: in1Operations.GroupBy(o => o.in2).ToDictionary(g => g.Key, g => g.Select(i => (i.op, i.result)).ToArray()))
 				).
 			ToDictionary(o => o.in1, o => o.in2ops);
+	}
+
+	public long Calculate(long x, long y)
+	{
+		var initials = CreateInitials(x, "x", _size).Concat(CreateInitials(y, "y", _size));
+		return Calculate(initials);
+	}
+
+	public long Calculate(IEnumerable<VarValue> initials)
+	{
 		VariablesMap variables = initials.ToDictionary(i => i.var, i => i.value);
 
 		bool canStop = false;
 		while (!canStop)
 		{
 			canStop = true;
-			foreach (Operation operation in operations)
+			foreach (Operation operation in _operations)
 			{
-				bool executed = ExecuteOperations(operation, operationsMap, variables);
+				bool executed = ExecuteOperations(operation, variables);
 				if (!executed && operation.result[0] == 'z')
 				{
 					canStop = false;
@@ -211,13 +227,25 @@ internal sealed class SolverA : SolverBase
 		return result;
 	}
 
-	private bool ExecuteOperations(Operation initialOperation, OperationsMap operationsMap, VariablesMap variables)
+	private static IEnumerable<VarValue> CreateInitials(long n, string prefix, int size)
+	{
+		int low = (int)(n & 0b11111111_11111111_11111111_11111111);
+		int high = (int)(n >> 32);
+		var bits = new BitArray([low, high]);
+		for (int i = 0; i < size; ++i)
+		{
+			bool bit = bits[i];
+			yield return ($"{prefix}{i:00}", bit);
+		}
+	}
+
+	private bool ExecuteOperations(Operation initialOperation, VariablesMap variables)
 	{
 		if (!ExecuteOperation(initialOperation, variables, out bool newResult)) return false;
 		if (!newResult) return true;
 
 		string result = initialOperation.result;
-		if (!operationsMap.TryGetValue(result, out var fromResultOperations)) return true;
+		if (!_operationsMap.TryGetValue(result, out var fromResultOperations)) return true;
 
 		bool allExecuted = true;
 		foreach (var (fromResultIn2, fromResultIn2Operations) in fromResultOperations)
@@ -233,7 +261,7 @@ internal sealed class SolverA : SolverBase
 		return allExecuted;
 	}
 
-	private bool ExecuteOperation(Operation operation, VariablesMap variables, out bool newResult)
+	private static bool ExecuteOperation(Operation operation, VariablesMap variables, out bool newResult)
 	{
 		newResult = false;
 		(string in1, string in2, Op op, string result) = operation;
@@ -253,10 +281,91 @@ internal sealed class SolverA : SolverBase
 }
 
 
-internal sealed class SolverB : SolverBase
+internal sealed class SolverA : SolverBase
 {
 	protected override long Solve(VarValue[] initials, Operation[] operations)
 	{
+		var calculator = new Calculator(operations, 45);
+		return calculator.Calculate(initials);
+	}
+}
+
+
+internal sealed class SolverB : SolverBase
+{
+	private const int Size = 45;
+
+	protected override long Solve(VarValue[] initials, Operation[] operations)
+	{
+		var calculator = new Calculator(operations, Size);
+
+		Dictionary<string, string[]> toLinks = operations.
+			SelectMany(GetLinks).
+			GroupBy(l => l.to).
+			ToDictionary(g => g.Key, g => g.Select(l => l.from).ToArray());
+
+		var test = toLinks.Keys.
+			Where(to => to[0] is 'z').
+			Select(to => (to, froms: GetPathsTo(to, toLinks).Where(path => path.Last()[0] is 'x' or 'y'))).
+			SelectMany(p => p.froms.Select(path => path.Prepend(p.to).ToArray())).
+			OrderBy(path => path[0]).
+			ToArray();
+
+		List<int> wrong = new();
+		for (int i = 0; i < Size; ++i)
+		{
+			//long x = 0;
+			//long y = 0b11111_11111_11111_11111_11111_11111_11111_11111_11111;
+
+			//long x = 1L << i;
+			//long y = 0;
+
+			long x = 0;
+			long y = 1L << i;
+
+			long expected = x + y;
+			long actual = calculator.Calculate(x, y);
+			if (expected != actual)
+			{
+				wrong.Add(i);
+			}
+		}
+
 		throw new NotImplementedException();
+	}
+
+	private bool IsNotValid(string[] path)
+	{
+		int toIndex = int.Parse(path[0].Substring(1));
+		int fromIndex = int.Parse(path[^1].Substring(1));
+		return fromIndex > toIndex;
+	}
+
+	private static IEnumerable<(string from, string to)> GetLinks(Operation operation)
+	{
+		(string in1, string in2, _, string result) = operation;
+		yield return (in1, result);
+		yield return (in2, result);
+	}
+
+	private static List<List<string>> GetPathsTo(string to, Dictionary<string, string[]> toLinks)
+	{
+		if (!toLinks.TryGetValue(to, out string[]? froms)) return [];
+
+		List<List<string>> result = new();
+		foreach (string from in froms)
+		{
+			var paths = GetPathsTo(from, toLinks);
+			if (paths.Count == 0)
+			{
+				result.Add([from]);
+			}
+			else
+			{
+				string[] fromArray = [from];
+				result.AddRange(paths.Select(path => fromArray.Concat(path).ToList()));
+			}
+		}
+		return result;
 	}
 }
