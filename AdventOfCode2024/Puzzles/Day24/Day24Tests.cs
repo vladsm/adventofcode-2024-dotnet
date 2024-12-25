@@ -295,6 +295,33 @@ internal sealed class SolverB : SolverBase
 {
 	private const int Size = 45;
 
+	private bool Check(Operation[] operations, int checkUntil)
+	{
+		var calculator = new Calculator(operations, Size);
+		for (int i = 0; i <= checkUntil; ++i)
+		{
+			long x = 0;
+			long y = 1L << i;
+
+			long expected = x + y;
+			long actual = calculator.Calculate(x, y);
+			if (expected != actual) return false;
+		}
+		return true;
+	}
+
+	private Operation[] Swap(string out1, string out2, Operation[] operations)
+	{
+		return operations.Select(swapIfNeeded).ToArray();
+
+		Operation swapIfNeeded(Operation operation)
+		{
+			if (operation.result == out1) return operation with { result = out2 };
+			if (operation.result == out2) return operation with { result = out1 };
+			return operation;
+		}
+	}
+
 	protected override long Solve(VarValue[] initials, Operation[] operations)
 	{
 		var calculator = new Calculator(operations, Size);
@@ -304,14 +331,19 @@ internal sealed class SolverB : SolverBase
 			GroupBy(l => l.to).
 			ToDictionary(g => g.Key, g => g.Select(l => l.from).ToArray());
 
-		var test = toLinks.Keys.
+		// var test = toLinks.Keys.
+		// 	Where(to => to[0] is 'z').
+		// 	Select(to => (to, froms: GetPathsTo(to, toLinks).Where(path => path.Last()[0] is 'x' or 'y'))).
+		// 	SelectMany(p => p.froms.Select(path => path.Prepend(p.to).ToArray())).
+		// 	OrderBy(path => path[0]).
+		// 	ToArray();
+
+		Dictionary<string, string[][]> toPaths = toLinks.Keys.
 			Where(to => to[0] is 'z').
 			Select(to => (to, froms: GetPathsTo(to, toLinks).Where(path => path.Last()[0] is 'x' or 'y'))).
-			SelectMany(p => p.froms.Select(path => path.Prepend(p.to).ToArray())).
-			OrderBy(path => path[0]).
-			ToArray();
+			ToDictionary(p => p.to, p => p.froms.Select(path => path.Prepend(p.to).ToArray()).ToArray());
 
-		List<int> wrong = new();
+		List<int> wrongs = new();
 		for (int i = 0; i < Size; ++i)
 		{
 			//long x = 0;
@@ -327,9 +359,38 @@ internal sealed class SolverB : SolverBase
 			long actual = calculator.Calculate(x, y);
 			if (expected != actual)
 			{
-				wrong.Add(i);
+				wrongs.Add(i);
 			}
 		}
+
+		// HashSet<string> toCheck = new();
+		// foreach (int wrong in wrongs)
+		// {
+		// 	var paths = toPaths[$"z{wrong:00}"];
+		// 	var candidates = paths.SelectMany(path => path.Take(path.Length - 1));
+		// 	foreach (string candidate in candidates)
+		// 	{
+		// 		toCheck.Add(candidate);
+		// 	}
+		// }
+
+		foreach (int wrong in wrongs)
+		{
+			var paths = toPaths[$"z{wrong:00}"];
+			var candidates = paths.SelectMany(path => path.Take(path.Length - 1)).ToHashSet();
+			List<(string, string)> test = new();
+			foreach (string c1 in candidates)
+			foreach (string c2 in candidates)
+			{
+				if (Check(Swap(c1, c2, operations), wrong))
+				{
+					test.Add((c1, c2));
+				}
+			}
+			int a = 9;
+		}
+
+
 
 		throw new NotImplementedException();
 	}
