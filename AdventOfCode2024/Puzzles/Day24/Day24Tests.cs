@@ -202,14 +202,19 @@ internal sealed class Calculator
 		while (!canStop)
 		{
 			canStop = true;
+			//bool notExecuted = true;
+			int variablesCountBefore = variables.Count;
 			foreach (Operation operation in _operations)
 			{
 				bool executed = ExecuteOperations(operation, variables);
+				//if (executed) notExecuted = false;
 				if (!executed && operation.result[0] == 'z')
 				{
 					canStop = false;
 				}
 			}
+			if (variables.Count <= variablesCountBefore) return -1;
+			//if (notExecuted) return -1;
 		}
 
 		bool[] bits = variables.
@@ -326,6 +331,8 @@ internal sealed class SolverB : SolverBase
 	{
 		var calculator = new Calculator(operations, Size);
 
+		string[] variables = operations.Select(o => o.result).ToArray();
+
 		Dictionary<string, string[]> toLinks = operations.
 			SelectMany(GetLinks).
 			GroupBy(l => l.to).
@@ -379,10 +386,10 @@ internal sealed class SolverB : SolverBase
 			var paths = toPaths[$"z{wrong:00}"];
 			var candidates = paths.SelectMany(path => path.Take(path.Length - 1)).ToHashSet();
 			List<(string, string)> test = new();
-			foreach (string c1 in candidates)
-			foreach (string c2 in candidates)
+			foreach (string c1 in variables)
+			foreach (string c2 in variables)
 			{
-				if (Check(Swap(c1, c2, operations), wrong))
+				if (Check(Swap(c1, c2, operations), Size))
 				{
 					test.Add((c1, c2));
 				}
@@ -395,12 +402,16 @@ internal sealed class SolverB : SolverBase
 		throw new NotImplementedException();
 	}
 
-	private bool IsNotValid(string[] path)
+	private void Print(Operation[] operations)
 	{
-		int toIndex = int.Parse(path[0].Substring(1));
-		int fromIndex = int.Parse(path[^1].Substring(1));
-		return fromIndex > toIndex;
+		Dictionary<string, Operation> byResult = operations.ToDictionary(o => o.result);
+
+		void print(Operation)
+		{
+
+		}
 	}
+
 
 	private static IEnumerable<(string from, string to)> GetLinks(Operation operation)
 	{
