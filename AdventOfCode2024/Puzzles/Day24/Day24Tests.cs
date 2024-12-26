@@ -69,7 +69,7 @@ public sealed class Day24Tests(ITestOutputHelper _output) : PuzzleTestsBase
 			""";
 
 		string[] lines = input.Split("\r\n");
-		long result = await new SolverA().Solve(lines.ToAsyncEnumerable());
+		string result = await new SolverA().Solve(lines.ToAsyncEnumerable());
 		_output.WriteLine($"Result: {result}");
 	}
 
@@ -78,7 +78,7 @@ public sealed class Day24Tests(ITestOutputHelper _output) : PuzzleTestsBase
 	{
 		await Runner.
 			Puzzle(2024, day: 24, level: 1).
-			SolveUsing<string, long, SolverA>().
+			SolveUsing<string, string, SolverA>().
 			AssertingResult(line => line).
 			Run(_output);
 	}
@@ -88,7 +88,7 @@ public sealed class Day24Tests(ITestOutputHelper _output) : PuzzleTestsBase
 	{
 		await Runner.
 			Puzzle(2024, day: 24, level: 2).
-			SolveUsing<string, long, SolverB>().
+			SolveUsing<string, string, SolverB>().
 			AssertingResult(line => line).
 			Run(_output);
 	}
@@ -103,7 +103,7 @@ internal enum Op
 }
 
 
-internal abstract partial class SolverBase : SolverWithArrayInput<string, long>
+internal abstract partial class SolverBase : SolverWithArrayInput<string, string>
 {
 	[GeneratedRegex(@"(\w+): ([01])")]
 	private static partial Regex VarValueRegex { get; }
@@ -112,13 +112,13 @@ internal abstract partial class SolverBase : SolverWithArrayInput<string, long>
 	private static partial Regex OperationRegex { get; }
 
 
-	protected override long Solve(string[] lines)
+	protected override string Solve(string[] lines)
 	{
 		(VarValue[] initials, Operation[] operations) = Parse(lines);
 		return Solve(initials, operations);
 	}
 
-	protected abstract long Solve(VarValue[] initials, Operation[] operations);
+	protected abstract string Solve(VarValue[] initials, Operation[] operations);
 
 	private (VarValue[] initials, Operation[] operations) Parse(string[] lines)
 	{
@@ -202,19 +202,16 @@ internal sealed class Calculator
 		while (!canStop)
 		{
 			canStop = true;
-			//bool notExecuted = true;
 			int variablesCountBefore = variables.Count;
 			foreach (Operation operation in _operations)
 			{
 				bool executed = ExecuteOperations(operation, variables);
-				//if (executed) notExecuted = false;
 				if (!executed && operation.result[0] == 'z')
 				{
 					canStop = false;
 				}
 			}
 			if (variables.Count <= variablesCountBefore) return -1;
-			//if (notExecuted) return -1;
 		}
 
 		bool[] bits = variables.
@@ -288,10 +285,10 @@ internal sealed class Calculator
 
 internal sealed class SolverA : SolverBase
 {
-	protected override long Solve(VarValue[] initials, Operation[] operations)
+	protected override string Solve(VarValue[] initials, Operation[] operations)
 	{
 		var calculator = new Calculator(operations, 45);
-		return calculator.Calculate(initials);
+		return calculator.Calculate(initials).ToString();
 	}
 }
 
@@ -299,6 +296,8 @@ internal sealed class SolverA : SolverBase
 internal sealed class SolverB : SolverBase
 {
 	private const int Size = 45;
+
+	private static readonly Random _random = new();
 
 	private bool Check(Operation[] operations, int checkUntil)
 	{
@@ -312,7 +311,29 @@ internal sealed class SolverB : SolverBase
 			long actual = calculator.Calculate(x, y);
 			if (expected != actual) return false;
 		}
+
+		for (int i = 0; i <= 10; ++i)
+		{
+			long x = _random.NextInt64() & 0b1111_11111_11111_11111_11111_11111_11111_11111_11111;
+			long y = _random.NextInt64() & 0b1111_11111_11111_11111_11111_11111_11111_11111_11111;
+
+			long expected = x + y;
+			long actual = calculator.Calculate(x, y);
+			if (expected != actual) return false;
+		}
+
 		return true;
+	}
+
+	private bool CheckFast(Operation[] operations, int bit)
+	{
+		var calculator = new Calculator(operations, Size);
+		long x = 0;
+		long y = 1L << bit;
+
+		long expected = y;
+		long actual = calculator.Calculate(x, y);
+		return expected == actual;
 	}
 
 	private Operation[] Swap(string out1, string out2, Operation[] operations)
@@ -327,7 +348,7 @@ internal sealed class SolverB : SolverBase
 		}
 	}
 
-	protected override long Solve(VarValue[] initials, Operation[] operations)
+	protected override string Solve(VarValue[] initials, Operation[] operations)
 	{
 		var calculator = new Calculator(operations, Size);
 
@@ -338,27 +359,16 @@ internal sealed class SolverB : SolverBase
 			GroupBy(l => l.to).
 			ToDictionary(g => g.Key, g => g.Select(l => l.from).ToArray());
 
-		// var test = toLinks.Keys.
-		// 	Where(to => to[0] is 'z').
-		// 	Select(to => (to, froms: GetPathsTo(to, toLinks).Where(path => path.Last()[0] is 'x' or 'y'))).
-		// 	SelectMany(p => p.froms.Select(path => path.Prepend(p.to).ToArray())).
-		// 	OrderBy(path => path[0]).
-		// 	ToArray();
-
 		Dictionary<string, string[][]> toPaths = toLinks.Keys.
 			Where(to => to[0] is 'z').
 			Select(to => (to, froms: GetPathsTo(to, toLinks).Where(path => path.Last()[0] is 'x' or 'y'))).
 			ToDictionary(p => p.to, p => p.froms.Select(path => path.Prepend(p.to).ToArray()).ToArray());
 
+		// I'm using these bits indexes to split checks into 4 parts (see below)
+		// ReSharper disable once CollectionNeverQueried.Local
 		List<int> wrongs = new();
 		for (int i = 0; i < Size; ++i)
 		{
-			//long x = 0;
-			//long y = 0b11111_11111_11111_11111_11111_11111_11111_11111_11111;
-
-			//long x = 1L << i;
-			//long y = 0;
-
 			long x = 0;
 			long y = 1L << i;
 
@@ -370,48 +380,63 @@ internal sealed class SolverB : SolverBase
 			}
 		}
 
-		// HashSet<string> toCheck = new();
-		// foreach (int wrong in wrongs)
-		// {
-		// 	var paths = toPaths[$"z{wrong:00}"];
-		// 	var candidates = paths.SelectMany(path => path.Take(path.Length - 1));
-		// 	foreach (string candidate in candidates)
-		// 	{
-		// 		toCheck.Add(candidate);
-		// 	}
-		// }
-
-		foreach (int wrong in wrongs)
+		List<(string, string)[]> testCandidates = [];
+		foreach (string p11 in GetWiresUntilZIndex(10, toPaths).Except(GetWiresUntilZIndex(9, toPaths)))
 		{
-			var paths = toPaths[$"z{wrong:00}"];
-			var candidates = paths.SelectMany(path => path.Take(path.Length - 1)).ToHashSet();
-			List<(string, string)> test = new();
-			foreach (string c1 in variables)
-			foreach (string c2 in variables)
+			foreach (string p12 in variables)
 			{
-				if (Check(Swap(c1, c2, operations), Size))
+				var swappedOperations1 = Swap(p11, p12, operations);
+				var success1 = CheckFast(swappedOperations1, 10);
+				if (!success1) continue;
+
+				foreach (string p21 in GetWiresUntilZIndex(14, toPaths).Except(GetWiresUntilZIndex(13, toPaths)))
+				foreach (string p22 in variables)
 				{
-					test.Add((c1, c2));
+					var swappedOperations2 = Swap(p21, p22, swappedOperations1);
+					var success2 = CheckFast(swappedOperations2, 14);
+					if (!success2) continue;
+
+					foreach (string p31 in GetWiresUntilZIndex(25, toPaths).Except(GetWiresUntilZIndex(24, toPaths)))
+					foreach (string p32 in variables)
+					{
+						var swappedOperations3 = Swap(p31, p32, swappedOperations2);
+						var success3 = CheckFast(swappedOperations3, 25);
+						if (!success3) continue;
+
+						foreach (string p41 in GetWiresUntilZIndex(34, toPaths).Except(GetWiresUntilZIndex(33, toPaths)))
+						foreach (string p42 in variables)
+						{
+							var swappedOperations4 = Swap(p41, p42, swappedOperations3);
+							var success4 = CheckFast(swappedOperations4, 34);
+							if (!success4) continue;
+
+							bool success = Check(swappedOperations4, Size - 1);
+							if (!success) continue;
+
+							testCandidates.Add([(p11, p12), (p21, p22), (p31, p32), (p41, p42)]);
+						}
+					}
 				}
 			}
-			int a = 9;
 		}
 
-
-
-		throw new NotImplementedException();
+		var swaps = testCandidates.First().SelectMany(p => new[] {p.Item1, p.Item2}).OrderBy(w => w);
+		return string.Join(",", swaps);
 	}
 
-	private void Print(Operation[] operations)
+	private static HashSet<string> GetWiresUntilZIndex(int index, Dictionary<string, string[][]> toPaths)
 	{
-		Dictionary<string, Operation> byResult = operations.ToDictionary(o => o.result);
-
-		void print(Operation)
+		HashSet<string> result = [];
+		for (int i = 0; i <= index; i++)
 		{
-
+			foreach (string wire in toPaths[$"z{i:00}"].SelectMany(w => w))
+			{
+				if (wire[0] is 'x' or 'y') continue;
+				result.Add(wire);
+			}
 		}
+		return result;
 	}
-
 
 	private static IEnumerable<(string from, string to)> GetLinks(Operation operation)
 	{
